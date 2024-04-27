@@ -10,8 +10,6 @@ logging.basicConfig(
 class TGBotShell:
     def __init__(self,TGBotToken):
         self.TGBotToken = TGBotToken
-        self.ee = 4
-        self.ee = 1
 
     def run(self):
         pass
