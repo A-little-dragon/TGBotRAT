@@ -32,7 +32,6 @@ class TGBotRAT:
     shell options选项如下：
         set uuid <new uuid>                                 设置新的uuid
         screenshot                                          获取实时截图
-        upload <current filepath> <target filepath>         上传文件至指定目标地址
         download <target filepath>                          下载指定目标文件（最大支持50MB）
         <shell命令>                                          执行相关系统命令
 
