@@ -111,4 +111,4 @@ python3 TGBotRAT.py
 
 ## 附美女图片
 
-![美女图片](image\image.png)
+![美女图片](./image/image.png)
